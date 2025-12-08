@@ -5,6 +5,8 @@ import ScheduleModal from './components/ScheduleModal';
 import BotWidget from './components/BotWidget';
 import ProjectModal from './components/ProjectModal';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://192.168.100.8:8080';
+
 const App = () => {
   const [selectedTag, setSelectedTag] = useState<string>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,7 +29,7 @@ const App = () => {
   useEffect(() => {
     const fetchSlots = async () => {
       try {
-        const res = await fetch('http://localhost:8080/api/availability');
+        const res = await fetch(`${API_URL}/api/availability`);
         if (!res.ok) throw new Error('Backend not reachable');
         const data = await res.json();
         setSlots(data);
@@ -48,7 +50,7 @@ const App = () => {
     ));
 
     try {
-      const res = await fetch('http://localhost:8080/api/book', {
+      const res = await fetch(`${API_URL}/api/book`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slotId })
@@ -65,7 +67,7 @@ const App = () => {
 
   const handleScheduleSubmit = async (data: { name: string; email: string; topic: string }) => {
     try {
-      const res = await fetch('http://localhost:8080/api/schedule-request', {
+      const res = await fetch(`${API_URL}/api/schedule-request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
