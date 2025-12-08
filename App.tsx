@@ -1,11 +1,13 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Project, TechStack, MeetingSlot } from './types';
 import { PROJECTS, INITIAL_SLOTS } from './constants';
+import ScheduleModal from './components/ScheduleModal';
 import BotWidget from './components/BotWidget';
 
 const App = () => {
   const [selectedTag, setSelectedTag] = useState<string>('All');
-  const [slots, setSlots] = useState<MeetingSlot[]>(INITIAL_SLOTS);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Slots state initialization moved down
 
   // -- Portfolio Logic --
   const filteredProjects = useMemo(() => {
@@ -15,25 +17,67 @@ const App = () => {
 
   const tags = ['All', ...Object.values(TechStack)];
 
-  // -- Scheduler Logic (Mock Backend) --
-  const handleBookSlot = useCallback((slotId: string): boolean => {
-    let success = false;
-    setSlots(prevSlots => {
-      const slotIndex = prevSlots.findIndex(s => s.id === slotId);
-      if (slotIndex !== -1 && prevSlots[slotIndex].available) {
-        success = true;
-        const newSlots = [...prevSlots];
-        newSlots[slotIndex] = { ...newSlots[slotIndex], available: false };
-        return newSlots;
+  // -- Scheduler Logic --
+  const [slots, setSlots] = useState<MeetingSlot[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch slots from Spring Boot Backend
+  useEffect(() => {
+    const fetchSlots = async () => {
+      try {
+        const res = await fetch('http://localhost:8080/api/availability');
+        if (!res.ok) throw new Error('Backend not reachable');
+        const data = await res.json();
+        setSlots(data);
+      } catch (err) {
+        console.warn('Failed to connect to Spring Boot backend, using local mock data.', err);
+        setSlots(INITIAL_SLOTS);
+      } finally {
+        setLoading(false);
       }
-      return prevSlots;
-    });
-    return success;
+    };
+    fetchSlots();
   }, []);
+
+  const handleBookSlot = useCallback(async (slotId: string): Promise<boolean> => {
+    // Optimistic update
+    setSlots(prevSlots => prevSlots.map(s =>
+      s.id === slotId ? { ...s, available: false } : s
+    ));
+
+    try {
+      const res = await fetch('http://localhost:8080/api/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotId })
+      });
+      const data = await res.json();
+      return data.success;
+    } catch (err) {
+      console.warn('Backend booking failed, using local optimistic success.', err);
+      // Fallback: Check if slot was available locally
+      const slot = slots.find(s => s.id === slotId);
+      return slot ? slot.available : false;
+    }
+  }, [slots]);
+
+  const handleScheduleSubmit = async (data: { name: string; email: string; topic: string }) => {
+    try {
+      const res = await fetch('http://localhost:8080/api/schedule-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return res.ok;
+    } catch (error) {
+      console.error("Booking request failed", error);
+      return false;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-      
+
       {/* Navigation */}
       <nav className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -57,20 +101,20 @@ const App = () => {
       <section id="about" className="relative pt-20 pb-24 lg:pt-32 lg:pb-40 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
           <h1 className="text-4xl sm:text-6xl font-extrabold text-slate-900 tracking-tight mb-6">
-            Building Scalable <span className="text-blue-600">Backend</span> & <br/> 
+            Building Scalable <span className="text-blue-600">Backend</span> & <br />
             High-Perf <span className="text-indigo-600">Frontend</span>
           </h1>
           <p className="mt-4 text-xl text-slate-600 max-w-2xl mx-auto mb-10">
-            Senior Full Stack Engineer specializing in Java Spring Boot, Angular, and React architectures. 
+            Senior Full Stack Engineer specializing in Java Spring Boot, Angular, and React architectures.
             Transforming complex requirements into robust, deployable solutions.
           </p>
           <div className="flex justify-center gap-4">
             <a href="#projects" className="px-8 py-3 rounded-full bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20">
               View Work
             </a>
-            <button 
-               onClick={() => alert("Try the AI Bot in the bottom right corner!")}
-               className="px-8 py-3 rounded-full bg-white text-slate-700 border border-slate-200 font-medium hover:bg-slate-50 transition-colors"
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-8 py-3 rounded-full bg-white text-slate-700 border border-slate-200 font-medium hover:bg-slate-50 transition-colors"
             >
               Schedule Meeting
             </button>
@@ -86,7 +130,7 @@ const App = () => {
               <h2 className="text-3xl font-bold text-slate-900">Featured Projects</h2>
               <p className="mt-2 text-slate-600">A selection of enterprise and open-source work.</p>
             </div>
-            
+
             {/* Tag Filters */}
             <div className="mt-6 md:mt-0 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
               <div className="flex space-x-2">
@@ -94,11 +138,10 @@ const App = () => {
                   <button
                     key={tag}
                     onClick={() => setSelectedTag(tag)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-                      selectedTag === tag 
-                      ? 'bg-slate-900 text-white shadow-md' 
+                    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${selectedTag === tag
+                      ? 'bg-slate-900 text-white shadow-md'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                      }`}
                   >
                     {tag}
                   </button>
@@ -112,14 +155,14 @@ const App = () => {
             {filteredProjects.map(project => (
               <div key={project.id} className="group relative bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col">
                 <div className="h-64 overflow-hidden relative">
-                   <img 
-                    src={project.imageUrl} 
-                    alt={project.title} 
+                  <img
+                    src={project.imageUrl}
+                    alt={project.title}
                     className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
-                   />
-                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
-                     <span className="text-white font-medium">View Case Study &rarr;</span>
-                   </div>
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
+                    <span className="text-white font-medium">View Case Study &rarr;</span>
+                  </div>
                 </div>
                 <div className="p-6 flex-1 flex flex-col">
                   <h3 className="text-xl font-bold text-slate-900 mb-2">{project.title}</h3>
@@ -135,11 +178,11 @@ const App = () => {
               </div>
             ))}
           </div>
-          
+
           {filteredProjects.length === 0 && (
-             <div className="text-center py-20">
-               <p className="text-slate-500">No projects found for this filter.</p>
-             </div>
+            <div className="text-center py-20">
+              <p className="text-slate-500">No projects found for this filter.</p>
+            </div>
           )}
         </div>
       </section>
@@ -147,16 +190,16 @@ const App = () => {
       {/* Tech Stack Banner */}
       <section className="py-16 border-t border-slate-200 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 text-center">
-             <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-8">Powering Solutions With</p>
-             <div className="flex justify-center items-center gap-8 md:gap-16 flex-wrap grayscale opacity-60">
-                {/* Simple text placeholders for logos */}
-                <span className="text-xl font-bold text-slate-800">Java Spring</span>
-                <span className="text-xl font-bold text-slate-800">Angular</span>
-                <span className="text-xl font-bold text-slate-800">PostgreSQL</span>
-                <span className="text-xl font-bold text-slate-800">React</span>
-                <span className="text-xl font-bold text-slate-800">Tailwind</span>
-                <span className="text-xl font-bold text-slate-800">Google Cloud</span>
-             </div>
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-8">Powering Solutions With</p>
+          <div className="flex justify-center items-center gap-8 md:gap-16 flex-wrap grayscale opacity-60">
+            {/* Simple text placeholders for logos */}
+            <span className="text-xl font-bold text-slate-800">Java Spring</span>
+            <span className="text-xl font-bold text-slate-800">Angular</span>
+            <span className="text-xl font-bold text-slate-800">PostgreSQL</span>
+            <span className="text-xl font-bold text-slate-800">React</span>
+            <span className="text-xl font-bold text-slate-800">Tailwind</span>
+            <span className="text-xl font-bold text-slate-800">Google Cloud</span>
+          </div>
         </div>
       </section>
 
@@ -165,7 +208,7 @@ const App = () => {
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold text-slate-900 mb-6">Let's Work Together</h2>
           <p className="text-lg text-slate-600 mb-8">
-            I'm currently available for freelance projects and senior engineering roles. 
+            I'm currently available for freelance projects and senior engineering roles.
             Use the AI Assistant to book a time, or drop me an email.
           </p>
           <a href="mailto:hello@example.com" className="text-blue-600 font-semibold text-lg hover:underline">
@@ -180,6 +223,9 @@ const App = () => {
 
       {/* AI Scheduler Widget */}
       <BotWidget slots={slots} onBookSlot={handleBookSlot} />
+
+      {/* Manual Schedule Modal */}
+      <ScheduleModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSubmit={handleScheduleSubmit} />
     </div>
   );
 };

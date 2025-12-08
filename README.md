@@ -18,3 +18,15 @@ View your app in AI Studio: https://ai.studio/apps/drive/1e-BXDcdmPvY5bUIcNxnM8Z
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Backend Setup
+
+**Prerequisites:**
+- Java 17 or higher
+- Maven 3.6+
+
+1. Navigate to the backend directory:
+   `cd backend`
+
+2. Run the application:
+   `mvn spring-boot:run`

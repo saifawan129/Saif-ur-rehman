@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createChatSession } from '../services/geminiService';
 import { MeetingSlot, ChatMessage } from '../types';
-import { GenerateContentResponse } from '@google/genai';
 
 interface BotWidgetProps {
   slots: MeetingSlot[];
-  onBookSlot: (slotId: string) => boolean;
+  onBookSlot: (slotId: string) => Promise<boolean>;
 }
 
 const BotWidget: React.FC<BotWidgetProps> = ({ slots, onBookSlot }) => {
@@ -50,13 +49,15 @@ const BotWidget: React.FC<BotWidgetProps> = ({ slots, onBookSlot }) => {
     setIsTyping(true);
 
     try {
-      let response: GenerateContentResponse = await chatSessionRef.current.sendMessage({ message: userMsg.text });
+      let result = await chatSessionRef.current.sendMessage(userMsg.text);
+      let response = await result.response;
+      let text = response.text();
 
       // Handle Function Calls Loop
-      // We loop because the model might call multiple tools or call a tool then expect a response before final text
-      while (response.functionCalls && response.functionCalls.length > 0) {
-        const functionResponses = response.functionCalls.map(call => {
-          const { name, args, id } = call;
+      while (response.functionCalls && response.functionCalls().length > 0) {
+        const functionCalls = response.functionCalls();
+        const functionResponses = await Promise.all(functionCalls.map(async (call) => {
+          const { name, args } = call;
           let result: any = { error: 'Unknown function' };
 
           if (name === 'checkAvailability') {
@@ -66,24 +67,24 @@ const BotWidget: React.FC<BotWidgetProps> = ({ slots, onBookSlot }) => {
             }));
             result = { slots: available };
           } else if (name === 'bookMeeting') {
-            const success = onBookSlot(args.slotId as string);
+            const success = await onBookSlot(args.slotId as string);
             result = { success, message: success ? 'Booking confirmed.' : 'Slot no longer available.' };
           }
 
           return {
-            id,
-            name,
-            response: { result }
+            functionResponse: {
+              name,
+              response: { name, content: result }
+            }
           };
-        });
+        }));
 
         // Send function execution results back to the model
-        response = await chatSessionRef.current.sendToolResponse({
-          functionResponses: functionResponses
-        });
+        result = await chatSessionRef.current.sendMessage(functionResponses);
+        response = await result.response;
+        text = response.text();
       }
 
-      const text = response.text;
       if (text) {
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text }]);
       }
@@ -121,8 +122,8 @@ const BotWidget: React.FC<BotWidgetProps> = ({ slots, onBookSlot }) => {
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none'
-                    : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm'
+                  ? 'bg-blue-600 text-white rounded-br-none'
+                  : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none shadow-sm'
                   }`}>
                   {msg.text}
                 </div>
