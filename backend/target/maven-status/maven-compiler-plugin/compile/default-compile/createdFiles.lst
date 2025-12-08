@@ -1,4 +1,6 @@
 com\devfolio\scheduler\model\MeetingSlot.class
 com\devfolio\scheduler\SchedulerApplication.class
-com\devfolio\scheduler\controller\MeetingController.class
+com\devfolio\scheduler\repository\MeetingRequestRepository.class
 com\devfolio\scheduler\config\WebConfig.class
+com\devfolio\scheduler\controller\MeetingController.class
+com\devfolio\scheduler\model\MeetingRequest.class
