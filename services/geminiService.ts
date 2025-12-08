@@ -39,10 +39,16 @@ const tools: Tool[] = [{
 }];
 
 export const createChatSession = () => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
+  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn("Gemini API Key is missing. Chat functionality will be disabled.");
+    return null;
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
   return ai.chats.create({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-1.5-flash',
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       tools: tools,
