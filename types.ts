@@ -2,9 +2,13 @@ export interface Project {
   id: string;
   title: string;
   description: string;
+  longDescription?: string;
+  features?: string[];
+  challenges?: string[];
   tags: string[];
   imageUrl: string;
   link: string;
+  githubLink?: string;
 }
 
 export interface MeetingSlot {
